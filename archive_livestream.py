@@ -160,7 +160,7 @@ def upload_to_ia(filepath: str, title: str, date_str: str, identifier: str) -> s
     )
     for r in responses:
         r.raise_for_status()
-    return f"https://archive.org/details/{identifier}"
+    return f"https://archive.org/download/{identifier}/video.mp4"
 
 
 # ── Step 8: Update Google Sheet ───────────────────────────────────────────────
