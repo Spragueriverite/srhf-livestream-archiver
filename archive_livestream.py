@@ -30,8 +30,7 @@ GOOGLE_SHEET_ID   = os.environ["GOOGLE_SHEET_ID"]
 GOOGLE_SA_JSON    = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
 IA_ACCESS_KEY     = os.environ["IA_ACCESS_KEY"]
 IA_SECRET_KEY     = os.environ["IA_SECRET_KEY"]
-META_APP_ID       = os.environ["META_APP_ID"]
-META_APP_SECRET   = os.environ["META_APP_SECRET"]
+META_PAGE_ACCESS_TOKEN = os.environ["META_PAGE_ACCESS_TOKEN"]
 
 GRAPH_API_VERSION = "v21.0"
 
@@ -42,9 +41,7 @@ PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
 
 # ── Graph API helpers ─────────────────────────────────────────────────────────
 
-def app_access_token() -> str:
-    """App access token — permanent, never expires."""
-    return f"{META_APP_ID}|{META_APP_SECRET}"
+
 
 
 def get_latest_video() -> dict | None:
@@ -56,7 +53,7 @@ def get_latest_video() -> dict | None:
     params = {
         "fields": "id,title,description,created_time",
         "limit": 5,
-        "access_token": app_access_token(),
+        "access_token": META_PAGE_ACCESS_TOKEN,
     }
     resp = requests.get(url, params=params, timeout=30)
     if not resp.ok:
