@@ -24,10 +24,9 @@ from google.oauth2.service_account import Credentials
 FACEBOOK_PAGE_URL = os.environ["FACEBOOK_PAGE_URL"]
 GOOGLE_SHEET_ID   = os.environ["GOOGLE_SHEET_ID"]
 GOOGLE_SA_JSON    = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-META_APP_ID       = os.environ["META_APP_ID"]
-META_APP_SECRET   = os.environ["META_APP_SECRET"]
+META_PAGE_ACCESS_TOKEN = os.environ["META_PAGE_ACCESS_TOKEN"]
 
-GRAPH_API_VERSION      = "v19.0"
+GRAPH_API_VERSION      = "v21.0"
 CHECK_INTERVAL_SECONDS = 120   # 2 minutes between checks
 MAX_DURATION_SECONDS   = 5400  # 90 minutes total (covers DST shift)
 
@@ -35,10 +34,6 @@ PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
 
 
 # ── Graph API helpers ─────────────────────────────────────────────────────────
-
-def app_access_token() -> str:
-    return f"{META_APP_ID}|{META_APP_SECRET}"
-
 
 def get_live_video() -> dict | None:
     """
@@ -48,10 +43,12 @@ def get_live_video() -> dict | None:
     url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{PAGE_NAME}/live_videos"
     params = {
         "fields": "id,title,description,status,created_time",
-        "access_token": app_access_token(),
+        "access_token": META_PAGE_ACCESS_TOKEN,
     }
     resp = requests.get(url, params=params, timeout=30)
-    resp.raise_for_status()
+    if not resp.ok:
+        print(f"  Graph API error {resp.status_code}: {resp.text}")
+        resp.raise_for_status()
     videos = resp.json().get("data", [])
     for v in videos:
         if v.get("status") == "LIVE":
