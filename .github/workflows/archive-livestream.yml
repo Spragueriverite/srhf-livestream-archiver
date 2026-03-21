@@ -10,6 +10,8 @@ on:
 jobs:
   archive:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     timeout-minutes: 90
 
     steps:
