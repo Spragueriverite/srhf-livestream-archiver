@@ -2,13 +2,10 @@
 """
 detect_livestream.py
 
-Runs Sunday morning from 10:00–10:20 AM PST.
-Checks the Facebook page every 2 minutes for an active livestream.
-As soon as one is detected, it writes the live info to row 2 of the sheet:
-  A: Facebook Live URL  |  B: Title  |  C: Date  |  D: Speaker  |  E: Scripture
-
-Exits immediately after writing. If no stream is found by 10:20 AM, exits cleanly.
-Row 2 is left blank until a stream is found — the 2 PM archive script clears it afterwards.
+Runs Sunday morning starting at 9:00 AM PST (covers DST shift).
+Polls the Facebook Graph API every 2 minutes for an active livestream.
+Once detected, writes live info to row 2 of the Google Sheet and exits.
+If nothing is found within 90 minutes, exits cleanly.
 """
 
 import os
@@ -17,8 +14,8 @@ import sys
 import json
 import time
 import datetime
-import subprocess
 
+import requests
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -27,59 +24,44 @@ from google.oauth2.service_account import Credentials
 FACEBOOK_PAGE_URL = os.environ["FACEBOOK_PAGE_URL"]
 GOOGLE_SHEET_ID   = os.environ["GOOGLE_SHEET_ID"]
 GOOGLE_SA_JSON    = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+META_APP_ID       = os.environ["META_APP_ID"]
+META_APP_SECRET   = os.environ["META_APP_SECRET"]
 
+GRAPH_API_VERSION      = "v19.0"
 CHECK_INTERVAL_SECONDS = 120   # 2 minutes between checks
-MAX_DURATION_SECONDS   = 5400  # Stop after 90 minutes total (covers DST shift)
+MAX_DURATION_SECONDS   = 5400  # 90 minutes total (covers DST shift)
+
+PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Graph API helpers ─────────────────────────────────────────────────────────
 
-def get_sheet_worksheet():
-    sa_info = json.loads(GOOGLE_SA_JSON)
-    creds = Credentials.from_service_account_info(
-        sa_info,
-        scopes=[
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive",
-        ],
-    )
-    gc = gspread.authorize(creds)
-    return gc.open_by_key(GOOGLE_SHEET_ID).get_worksheet(0)
+def app_access_token() -> str:
+    return f"{META_APP_ID}|{META_APP_SECRET}"
 
 
-def fetch_latest_video_info() -> dict | None:
-    """Use yt-dlp to get metadata for the most recent/live video on the page."""
-    result = subprocess.run(
-        [
-            "yt-dlp",
-            "--dump-json",
-            "--playlist-items", "1",
-            "--no-download",
-            FACEBOOK_PAGE_URL,
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        return None
-    first_line = result.stdout.strip().splitlines()[0]
-    try:
-        return json.loads(first_line)
-    except json.JSONDecodeError:
-        return None
+def get_live_video() -> dict | None:
+    """
+    Check the page's /live_videos endpoint for an active stream.
+    Returns the live video dict if one is found, otherwise None.
+    """
+    url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{PAGE_NAME}/live_videos"
+    params = {
+        "fields": "id,title,description,status,created_time",
+        "access_token": app_access_token(),
+    }
+    resp = requests.get(url, params=params, timeout=30)
+    resp.raise_for_status()
+    videos = resp.json().get("data", [])
+    for v in videos:
+        if v.get("status") == "LIVE":
+            return v
+    return None
 
 
-def is_live(info: dict) -> bool:
-    """Return True if yt-dlp reports this video as currently live."""
-    return bool(info.get("is_live") or info.get("live_status") == "is_live")
-
+# ── Extraction helpers ────────────────────────────────────────────────────────
 
 def extract_title(text: str, scripture_fallback: str) -> str:
-    """
-    Pull the sermon title from the description — expected to be in double quotes.
-    e.g. 'Pastor Jeff will be teaching "The Way of the Cross" out of Acts 9'
-    If no quoted title is found, fall back to the scripture reference.
-    """
     match = re.search(r'"([^"]+)"', text)
     if match:
         return match.group(1).strip()
@@ -107,8 +89,22 @@ def extract_speaker(text: str) -> str:
     return match.group(0).strip() if match else ""
 
 
+# ── Sheet helper ──────────────────────────────────────────────────────────────
+
+def get_worksheet():
+    sa_info = json.loads(GOOGLE_SA_JSON)
+    creds = Credentials.from_service_account_info(
+        sa_info,
+        scopes=[
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive",
+        ],
+    )
+    gc = gspread.authorize(creds)
+    return gc.open_by_key(GOOGLE_SHEET_ID).get_worksheet(0)
+
+
 def write_row_2(worksheet, live_url: str, title: str, date_str: str, speaker: str, scripture: str) -> None:
-    """Write live info directly into row 2 (never append — always overwrite row 2)."""
     worksheet.update(
         range_name="A2:E2",
         values=[[live_url, title, date_str, speaker, scripture]],
@@ -123,8 +119,9 @@ def main():
     print("=" * 52)
     print("  SRHF Livestream Detector")
     print("=" * 52)
+    print(f"  Page: {PAGE_NAME}")
 
-    worksheet    = get_sheet_worksheet()
+    worksheet    = get_worksheet()
     start_time   = time.time()
     check_number = 0
 
@@ -138,19 +135,22 @@ def main():
             print("90 minutes elapsed with no livestream detected. Exiting cleanly.")
             sys.exit(0)
 
-        print("  Fetching page metadata...")
-        info = fetch_latest_video_info()
+        print("  Checking for active livestream via Graph API...")
+        try:
+            live = get_live_video()
+        except requests.RequestException as e:
+            print(f"  API request failed: {e} — will retry.")
+            live = None
 
-        if info is None:
-            print("  Could not fetch metadata. Will retry.")
-        elif is_live(info):
-            description = info.get("description", "")
-            scripture   = extract_scripture(description)
-            title       = extract_title(description, scripture or info.get("title", "Sunday Service"))
-            live_url    = info.get("webpage_url", FACEBOOK_PAGE_URL)
+        if live:
+            video_id    = live["id"]
+            description = live.get("description", "")
             today       = datetime.date.today()
             date_str    = f"{today.month}-{today.day}-{today.year}"
+            scripture   = extract_scripture(description)
+            title       = extract_title(description, scripture or live.get("title", "Sunday Service"))
             speaker     = extract_speaker(description)
+            live_url    = f"https://www.facebook.com/{PAGE_NAME}/videos/{video_id}/"
 
             print(f"  🔴 Livestream detected!")
             print(f"  Title:     {title}")
@@ -162,10 +162,8 @@ def main():
             print("\n✓ Row 2 populated. Done!")
             sys.exit(0)
         else:
-            upload_date = info.get("upload_date", "unknown")
-            print(f"  No active livestream. Most recent video is from {upload_date}.")
+            print("  No active livestream found.")
 
-        # Wait before next check (unless we're about to exceed the time limit)
         remaining = MAX_DURATION_SECONDS - (time.time() - start_time)
         if remaining <= 0:
             print("\n90 minutes elapsed with no livestream detected. Exiting cleanly.")
