@@ -4,15 +4,15 @@ on:
   schedule:
     # 9:00 AM PST (UTC-8) = 17:00 UTC
     # During Daylight Saving (Mar–Nov) this fires at 10:00 AM PDT.
-    # Either way the job runs until a stream is detected or 90 minutes elapse,
-    # covering a 9:00–10:30 AM PST window in winter and 10:00–11:30 AM PDT in summer.
+    # The script runs for up to 90 minutes, covering 9:00–10:30 AM PST in winter
+    # and 10:00–11:30 AM PDT in summer.
     - cron: '0 17 * * 0'
-  workflow_dispatch: # Allow manual triggering for testing
+  workflow_dispatch:
 
 jobs:
   detect:
     runs-on: ubuntu-latest
-    timeout-minutes: 100 # Slightly more than the 90-minute loop, just in case
+    timeout-minutes: 100
 
     steps:
       - name: Checkout repository
@@ -24,11 +24,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install yt-dlp gspread google-auth
+        run: pip install gspread google-auth requests
 
       - name: Run livestream detector
         env:
           FACEBOOK_PAGE_URL: ${{ vars.FACEBOOK_PAGE_URL }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
         run: python detect_livestream.py
