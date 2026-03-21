@@ -33,7 +33,7 @@ IA_SECRET_KEY     = os.environ["IA_SECRET_KEY"]
 META_APP_ID       = os.environ["META_APP_ID"]
 META_APP_SECRET   = os.environ["META_APP_SECRET"]
 
-GRAPH_API_VERSION = "v19.0"
+GRAPH_API_VERSION = "v21.0"
 
 # Derive the page name from the URL
 # e.g. https://www.facebook.com/spragueriverhomefellowship/videos/ → spragueriverhomefellowship
@@ -59,7 +59,9 @@ def get_latest_video() -> dict | None:
         "access_token": app_access_token(),
     }
     resp = requests.get(url, params=params, timeout=30)
-    resp.raise_for_status()
+    if not resp.ok:
+        print(f"  Graph API error {resp.status_code}: {resp.text}")
+        resp.raise_for_status()
     data = resp.json().get("data", [])
     if not data:
         print("  No videos found on page.")
