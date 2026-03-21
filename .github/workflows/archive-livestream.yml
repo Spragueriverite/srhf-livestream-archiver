@@ -2,15 +2,15 @@ name: Archive Sunday Livestream
 
 on:
   schedule:
-    # 2:00 PM PST (UTC-8) = 22:00 UTC | Note: during Daylight Saving (Mar–Nov)
-    # this will run at 3:00 PM PDT. Adjust to '0 21 * * 0' if you prefer PDT.
+    # 2:00 PM PST (UTC-8) = 22:00 UTC
+    # During Daylight Saving (Mar–Nov) this fires at 3:00 PM PDT — still after the service.
     - cron: '0 22 * * 0'
-  workflow_dispatch: # Allows manual triggering from the Actions tab (great for testing)
+  workflow_dispatch:
 
 jobs:
   archive:
     runs-on: ubuntu-latest
-    timeout-minutes: 90 # Videos can be large — give it plenty of time
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
@@ -22,7 +22,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install yt-dlp internetarchive gspread google-auth
+        run: pip install yt-dlp internetarchive gspread google-auth requests
 
       - name: Run archive script
         env:
@@ -31,4 +31,6 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
         run: python archive_livestream.py
