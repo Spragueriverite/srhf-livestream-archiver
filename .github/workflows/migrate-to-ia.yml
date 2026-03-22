@@ -1,0 +1,34 @@
+name: Migrate Past Videos to Internet Archive
+
+on:
+  schedule:
+    # Runs once daily at 3:00 AM PST (11:00 UTC) — well outside Sunday service hours
+    - cron: '0 11 * * *'
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install yt-dlp internetarchive gspread google-auth
+
+      - name: Run migration script
+        env:
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+        run: python migrate_to_ia.py
