@@ -42,7 +42,7 @@ def get_live_video() -> dict | None:
     """
     url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{PAGE_NAME}/live_videos"
     params = {
-        "fields": "id,title,description,status,created_time",
+        "fields": "id,title,description,status,created_time,permalink_url",
         "access_token": META_PAGE_ACCESS_TOKEN,
     }
     resp = requests.get(url, params=params, timeout=30)
@@ -66,16 +66,18 @@ def extract_title(text: str, scripture_fallback: str) -> str:
 
 
 def extract_scripture(text: str) -> str:
+    # Strip trailing punctuation from each word so "Acts 10!" still matches
+    cleaned = re.sub(r"[!?.,:;]+", " ", text)
     pattern = (
         r"\b"
         r"(?:\d\s+)?"
-        r"[A-Z][a-zA-Z]+(?:\s+[A-Za-z]+)*"
+        r"[A-Z][a-zA-Z]+(?:\s+[A-Za-z]+){0,2}"
         r"\s+"
         r"\d+(?::\d+)?"
         r"(?:[-–]\d+)?"
         r"\b"
     )
-    match = re.search(pattern, text)
+    match = re.search(pattern, cleaned)
     return match.group(0).strip() if match else ""
 
 
@@ -145,9 +147,11 @@ def main():
             today       = datetime.date.today()
             date_str    = f"{today.month}-{today.day}-{today.year}"
             scripture   = extract_scripture(description)
-            title       = extract_title(description, scripture or live.get("title", "Sunday Service"))
+            fb_title    = live.get("title", "")
+            clean_title = fb_title if fb_title and fb_title != description else ""
+            title       = extract_title(description, scripture or clean_title or "Sunday Service")
             speaker     = extract_speaker(description)
-            live_url    = f"https://www.facebook.com/{PAGE_NAME}/videos/{video_id}/"
+            live_url    = live.get("permalink_url") or f"https://www.facebook.com/{PAGE_NAME}/videos/{video_id}/"
 
             print(f"  🔴 Livestream detected!")
             print(f"  Title:     {title}")
