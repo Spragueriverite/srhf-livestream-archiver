@@ -6,7 +6,7 @@ on:
     # During Daylight Saving (Mar–Nov) this fires at 10:00 AM PDT.
     # The script runs for up to 90 minutes, covering 9:00–10:30 AM PST in winter
     # and 10:00–11:30 AM PDT in summer.
-    - cron: '0 17 * * 0'
+    - cron: '30 16 * * 0'
   workflow_dispatch:
 
 jobs:
