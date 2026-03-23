@@ -101,7 +101,7 @@ def extract_scripture(text: str) -> str:
     pattern = (
         r"\b"
         r"(?:\d\s+)?"
-        r"[A-Z][a-zA-Z]+(?:\s+[A-Za-z]+)*"
+        r"[A-Z][a-zA-Z]+(?:\s+[A-Za-z]+){0,2}"
         r"\s+"
         r"\d+(?::\d+)?"
         r"(?:[-–]\d+)?"
@@ -217,7 +217,7 @@ def main():
     today       = datetime.date.today()
     date_str    = f"{today.month}-{today.day}-{today.year}"
     scripture   = extract_scripture(description)
-    title       = extract_title(description, scripture or video.get("title", "Untitled Sermon"))
+    title       = extract_title(description, scripture or "Untitled Sermon")
     speaker     = extract_speaker(description)
     identifier  = make_ia_identifier(title, f"{today.year}-{today.month:02d}-{today.day:02d}")
 
