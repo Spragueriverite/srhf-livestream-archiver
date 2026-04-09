@@ -151,7 +151,12 @@ def main():
             clean_title = fb_title if fb_title and fb_title != description else ""
             title       = extract_title(description, scripture or clean_title or "Sunday Service")
             speaker     = extract_speaker(description)
-            live_url    = live.get("permalink_url") or f"https://www.facebook.com/{PAGE_NAME}/videos/{video_id}/"
+            raw_url     = live.get("permalink_url", "")
+            # API sometimes returns a relative path — normalise to a full URL
+            if raw_url.startswith("http"):
+                live_url = raw_url
+            else:
+                live_url = f"https://www.facebook.com/{PAGE_NAME}/videos/{video_id}/"
 
             print(f"  🔴 Livestream detected!")
             print(f"  Title:     {title}")
