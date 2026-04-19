@@ -37,8 +37,9 @@ PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
 
 def get_live_video() -> dict | None:
     """
-    Check the page's /live_videos endpoint for an active stream.
-    Returns the live video dict if one is found, otherwise None.
+    Check the page's /live_videos endpoint for an active stream created today.
+    Filtering by today's date prevents stale ended livestreams with a lingering
+    LIVE status from being mistakenly returned.
     """
     url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{PAGE_NAME}/live_videos"
     params = {
@@ -50,9 +51,18 @@ def get_live_video() -> dict | None:
         print(f"  Graph API error {resp.status_code}: {resp.text}")
         resp.raise_for_status()
     videos = resp.json().get("data", [])
+    today_utc = datetime.datetime.now(datetime.timezone.utc).date()
     for v in videos:
-        if v.get("status") == "LIVE":
-            return v
+        if v.get("status") != "LIVE":
+            continue
+        # Reject any live video not created today — these are stale ghost entries
+        created_raw = v.get("created_time", "")
+        if created_raw:
+            created = datetime.datetime.fromisoformat(created_raw.replace("+0000", "+00:00"))
+            if created.date() != today_utc:
+                print(f"  Skipping stale LIVE entry from {created.date()} (not today)")
+                continue
+        return v
     return None
 
 
