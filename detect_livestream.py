@@ -53,23 +53,59 @@ def get_live_video() -> dict | None:
     videos = resp.json().get("data", [])
     today_utc = datetime.datetime.now(datetime.timezone.utc).date()
 
+    candidates = []
     for v in videos:
         if v.get("status") != "LIVE":
             continue
 
         # Reject stale entries not created today
         created_raw = v.get("created_time", "")
-        if created_raw:
-            created = datetime.datetime.fromisoformat(
-                created_raw.replace("+0000", "+00:00")
-            )
-            if created.date() != today_utc:
-                print(f"  Skipping stale LIVE entry from {created.date()} (not today)")
-                continue
+        if not created_raw:
+            continue
+        created = datetime.datetime.fromisoformat(
+            created_raw.replace("+0000", "+00:00")
+        )
+        if created.date() != today_utc:
+            print(f"  Skipping stale LIVE entry from {created.date()} (not today)")
+            continue
 
-        return v
+        candidates.append((created, v))
 
-    return None
+    if not candidates:
+        return None
+
+    # Pick the most recently created live video in case there are multiple
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    if len(candidates) > 1:
+        print(f"  Found {len(candidates)} LIVE videos today — using most recent")
+    return candidates[0][1]
+
+
+# ── URL verification ─────────────────────────────────────────────────────────
+
+def is_url_accessible(url: str) -> bool:
+    """
+    Check if a Facebook video URL is actually accessible.
+    Ghost/inaccessible videos return a redirect to an error page or a
+    non-200 status. We follow redirects and check the final URL — if
+    Facebook bounces us to /watch/ or /video/unavailable/ it is a ghost.
+    """
+    try:
+        resp = requests.get(
+            url,
+            timeout=10,
+            allow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        final_url = resp.url.lower()
+        # Facebook redirects inaccessible videos to these paths
+        if any(p in final_url for p in ["unavailable", "login", "/watch", "checkpoint"]):
+            print(f"  URL redirected to inaccessible page: {resp.url}")
+            return False
+        return resp.status_code == 200
+    except requests.RequestException as e:
+        print(f"  URL check failed: {e}")
+        return False
 
 
 # ── Extraction helpers ────────────────────────────────────────────────────────
@@ -177,7 +213,13 @@ def main():
             else:
                 live_url = f"https://www.facebook.com/{PAGE_NAME}/videos/{video_id}/"
 
-            print(f"  🔴 Livestream detected!")
+            # Verify the URL is actually accessible before trusting it
+            print(f"  Verifying URL is accessible...")
+            if not is_url_accessible(live_url):
+                print(f"  URL is inaccessible — treating as ghost entry, skipping.")
+                live = None
+            else:
+                print(f"  🔴 Livestream detected!")
             print(f"  Title:     {title}")
             print(f"  Speaker:   {speaker or '(not in description yet)'}")
             print(f"  Scripture: {scripture or '(not in description yet)'}")
