@@ -153,7 +153,12 @@ def get_worksheet():
             "https://www.googleapis.com/auth/drive",
         ],
     )
-    gc = gspread.authorize(creds)
+    # Use a requests session with an explicit timeout so we never hang indefinitely
+    import requests as req_module
+    session = req_module.Session()
+    session.timeout = 30
+    gc = gspread.Client(auth=creds, session=session)
+    gc.login()
     return gc.open_by_key(GOOGLE_SHEET_ID).get_worksheet(0)
 
 
