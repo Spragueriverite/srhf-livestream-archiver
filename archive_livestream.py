@@ -36,7 +36,8 @@ IA_SECRET_KEY     = os.environ["IA_SECRET_KEY"]
 META_PAGE_TOKEN   = os.environ["META_PAGE_ACCESS_TOKEN"]
 
 GRAPH_API_VERSION = "v19.0"
-PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-1]
+# URL ends with /videos/, so take [-2] to get the page name
+PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
 
 # Allow videos posted within the last 36 hours to account for UTC/PST timezone
 # differences. A video posted Sunday evening PST is already Monday in UTC.
