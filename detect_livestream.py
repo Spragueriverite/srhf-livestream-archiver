@@ -2,7 +2,7 @@
 """
 detect_livestream.py
 
-Runs Sunday morning starting at 9:30 AM PDT (16:30 UTC).
+Runs Sunday morning starting at 8:30 AM PST / 9:30 AM PDT (16:30 UTC).
 Polls the Facebook Graph API every 2 minutes for an active livestream created today.
 Once detected, writes live info to row 2 of the Google Sheet and exits.
 If nothing is found within 90 minutes, exits cleanly.
@@ -19,7 +19,7 @@ import requests
 import gspread
 from google.oauth2.service_account import Credentials
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ── Config ────
 
 FACEBOOK_PAGE_URL  = os.environ["FACEBOOK_PAGE_URL"]
 GOOGLE_SHEET_ID    = os.environ["GOOGLE_SHEET_ID"]
@@ -30,10 +30,10 @@ GRAPH_API_VERSION      = "v19.0"
 CHECK_INTERVAL_SECONDS = 120   # 2 minutes between checks
 MAX_DURATION_SECONDS   = 5400  # 90 minutes total
 
-PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
+PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-1]
 
 
-# ── Graph API ─────────────────────────────────────────────────────────────────
+# ── Graph API ────
 
 def get_live_video() -> dict | None:
     """
@@ -81,7 +81,7 @@ def get_live_video() -> dict | None:
     return candidates[0][1]
 
 
-# ── URL verification ─────────────────────────────────────────────────────────
+# ── URL verification ────
 
 def is_url_accessible(url: str) -> bool:
     """
@@ -108,7 +108,7 @@ def is_url_accessible(url: str) -> bool:
         return False
 
 
-# ── Extraction helpers ────────────────────────────────────────────────────────
+# ── Extraction helpers ────
 
 BIBLE_BOOKS_PATTERN = (
     r"(?:Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Joshua|Judges|Ruth|"
@@ -142,7 +142,7 @@ def extract_speaker(text: str) -> str:
     return match.group(0).strip() if match else ""
 
 
-# ── Sheet helper ──────────────────────────────────────────────────────────────
+# ── Sheet helper ────
 
 def get_worksheet():
     sa_info = json.loads(GOOGLE_SA_JSON)
@@ -153,12 +153,7 @@ def get_worksheet():
             "https://www.googleapis.com/auth/drive",
         ],
     )
-    # Use a requests session with an explicit timeout so we never hang indefinitely
-    import requests as req_module
-    session = req_module.Session()
-    session.timeout = 30
-    gc = gspread.Client(auth=creds, session=session)
-    gc.login()
+    gc = gspread.authorize(creds)
     return gc.open_by_key(GOOGLE_SHEET_ID).get_worksheet(0)
 
 
@@ -171,7 +166,7 @@ def write_row_2(worksheet, live_url, title, date_str, speaker, scripture):
     print("  Row 2 updated with live stream info.")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Main ────
 
 def main():
     print("=" * 52)
