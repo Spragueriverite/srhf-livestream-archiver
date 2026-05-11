@@ -2,7 +2,7 @@
 """
 archive_livestream.py
 
-Every Sunday at 2:00 PM PST/PDT, this script:
+Every Sunday at 2:00 PM PST, this script:
   1. Uses the Facebook Graph API to check if a video was posted today.
   2. If not, exits cleanly — nothing to do.
   3. If yes, downloads the video via yt-dlp.
@@ -25,7 +25,6 @@ import requests
 import gspread
 import internetarchive
 from google.oauth2.service_account import Credentials
-from zoneinfo import ZoneInfo
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -37,8 +36,7 @@ IA_SECRET_KEY     = os.environ["IA_SECRET_KEY"]
 META_PAGE_TOKEN   = os.environ["META_PAGE_ACCESS_TOKEN"]
 
 GRAPH_API_VERSION = "v19.0"
-PACIFIC           = ZoneInfo("America/Los_Angeles")  # Handles PST/PDT automatically
-PAGE_NAME         = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
+PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-2]
 
 
 # ── Graph API ─────────────────────────────────────────────────────────────────
@@ -63,19 +61,13 @@ def get_latest_video() -> dict | None:
 # ── Check date ────────────────────────────────────────────────────────────────
 
 def posted_today(video: dict) -> bool:
-    """
-    Return True only if the video was posted today in Pacific time.
-    Facebook returns created_time in UTC — we convert to Pacific before comparing.
-    """
+    """Return True only if the video was created today (UTC)."""
     raw = video.get("created_time", "")
     if not raw:
         return False
-    created_utc = datetime.datetime.fromisoformat(raw.replace("+0000", "+00:00"))
-    created_pacific = created_utc.astimezone(PACIFIC)
-    today_pacific = datetime.datetime.now(PACIFIC).date()
-    print(f"  Video posted at {created_pacific.strftime('%Y-%m-%d %I:%M %p %Z')}")
-    print(f"  Today (Pacific): {today_pacific}")
-    return created_pacific.date() == today_pacific
+    created = datetime.datetime.fromisoformat(raw.replace("+0000", "+00:00"))
+    today_utc = datetime.datetime.now(datetime.timezone.utc).date()
+    return created.date() == today_utc
 
 
 # ── Extraction helpers ────────────────────────────────────────────────────────
@@ -199,16 +191,17 @@ def main():
         print("ERROR: Could not retrieve video. Exiting.")
         sys.exit(1)
 
-    # 2. Check if posted today (Pacific time)
+    # 2. Check if posted today
     print("\n[2/4] Checking if a video was posted today...")
     if not posted_today(video):
+        print(f"  Most recent video is from {video.get('created_time', 'unknown')}, not today.")
         print("  No livestream today — nothing to archive. Exiting cleanly.")
         sys.exit(0)
 
     # Extract metadata
     video_id    = video["id"]
     description = video.get("description", "")
-    today       = datetime.datetime.now(PACIFIC).date()
+    today       = datetime.date.today()
     date_str    = f"{today.month}-{today.day}-{today.year}"
     scripture   = extract_scripture(description)
     fb_title    = video.get("title", "")
