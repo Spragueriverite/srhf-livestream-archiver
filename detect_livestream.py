@@ -18,6 +18,7 @@ import datetime
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
+from urllib.parse import urlparse
 
 # ── Config ────
 
@@ -30,7 +31,33 @@ GRAPH_API_VERSION      = "v19.0"
 CHECK_INTERVAL_SECONDS = 120   # 2 minutes between checks
 MAX_DURATION_SECONDS   = 5400  # 90 minutes total
 
-PAGE_NAME = [p for p in FACEBOOK_PAGE_URL.rstrip("/").split("/") if p][-1]
+
+def extract_page_name(url: str) -> str:
+    """
+    Pull the Facebook page slug out of a page URL.
+
+    The Facebook page name is the FIRST path segment after the domain,
+    e.g. https://www.facebook.com/spragueriverhomefellowship/videos/
+    -> "spragueriverhomefellowship".
+
+    A naive "last path segment" parse breaks when the configured URL ends
+    in a sub-section such as /videos/ or /live/ — it would return "videos",
+    which is not a real page and makes every Graph API call fail with a 400.
+    We skip those known sub-section segments and return the real slug.
+    """
+    path = urlparse(url).path
+    segments = [s for s in path.split("/") if s]
+    subpaths = {
+        "videos", "live", "posts", "photos", "about",
+        "video", "reels", "events", "community",
+    }
+    for seg in segments:
+        if seg.lower() not in subpaths:
+            return seg
+    return segments[0] if segments else ""
+
+
+PAGE_NAME = extract_page_name(FACEBOOK_PAGE_URL)
 
 
 # ── Graph API ────
@@ -216,18 +243,19 @@ def main():
             # Verify the URL is actually accessible before trusting it
             print(f"  Verifying URL is accessible...")
             if not is_url_accessible(live_url):
+                # Ghost / inaccessible entry — do NOT write it to the sheet.
+                # Skip this candidate and keep polling for a real stream.
                 print(f"  URL is inaccessible — treating as ghost entry, skipping.")
-                live = None
             else:
                 print(f"  🔴 Livestream detected!")
-            print(f"  Title:     {title}")
-            print(f"  Speaker:   {speaker or '(not in description yet)'}")
-            print(f"  Scripture: {scripture or '(not in description yet)'}")
-            print(f"  URL:       {live_url}")
+                print(f"  Title:     {title}")
+                print(f"  Speaker:   {speaker or '(not in description yet)'}")
+                print(f"  Scripture: {scripture or '(not in description yet)'}")
+                print(f"  URL:       {live_url}")
 
-            write_row_2(worksheet, live_url, title, date_str, speaker, scripture)
-            print("\n✓ Row 2 populated. Done!")
-            sys.exit(0)
+                write_row_2(worksheet, live_url, title, date_str, speaker, scripture)
+                print("\n✓ Row 2 populated. Done!")
+                sys.exit(0)
 
         else:
             print("  No active livestream found.")
